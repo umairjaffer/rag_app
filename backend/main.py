@@ -1,13 +1,16 @@
-"""main.py -- Application entry point.
+"""
+main.py
 
-Creates the FastAPI app, loads shared resources on startup, and wires
-everything together with a single line: app.include_router(router).
+FastAPI application entry point.
 
-All API endpoints live in app/routes.py, not here.
+Responsibilities:
 
-Run:
-    uvicorn main:app --reload --port 8000
-    Then open http://localhost:8000/docs
+- Initialize PostgreSQL tables
+- Load embedding model
+- Connect to Qdrant
+- Initialize OpenAI LLM
+- Create temporary upload directory
+- Register API routes
 """
 
 import logging
@@ -18,61 +21,169 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import ChatOpenAI
 
+from app import db_models
 from app.api import app_state
 from app.config import settings
-from app.rag_chain import get_embeddings, get_qdrant_client
+from app.database import Base, engine
+from app.rag_chain import (
+    get_embeddings,
+    get_qdrant_client,
+)
 from app.routes import router
 from app.timing import log_time
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s | %(name)s | %(message)s")
+
+# ----------------------------------------------------------------------
+# Logging configuration
+# ----------------------------------------------------------------------
+
+logging.basicConfig(
+    level=logging.INFO,
+    format=(
+        "%(asctime)s | "
+        "%(levelname)s | "
+        "%(name)s | "
+        "%(message)s"
+    ),
+)
+
 logger = logging.getLogger(__name__)
 
 
+# ======================================================================
+# Application lifespan
+# ======================================================================
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load expensive shared objects once at startup, release them at shutdown.
-
-    Code before `yield` runs once when the server starts.
-    Code after `yield` runs once when the server shuts down.
-    Loading these objects here means every request can reuse them
-    instantly instead of re-creating them each time.
     """
-    logger.info("Loading embedding model (%s)...", settings.embedding_provider)
-    with log_time("loading embedding model"):
-        app_state["embeddings"] = get_embeddings(settings.embedding_provider, settings.openai_api_key)
+    Initialize shared resources once when FastAPI starts.
+    """
 
-    logger.info("Connecting to Qdrant...")
-    with log_time("connecting to Qdrant"):
-        app_state["qdrant_client"] = get_qdrant_client(settings.qdrant_url, settings.qdrant_api_key)
-
-    logger.info("Connecting to OpenAI LLM (%s)...", settings.llm_model)
-    app_state["llm"] = ChatOpenAI(
-        model=settings.llm_model,
-        temperature=0,
-        api_key=settings.openai_api_key,
-    )
-
-    Path(settings.upload_dir).mkdir(parents=True, exist_ok=True)  # Temp folder for uploads
+    # ------------------------------------------------------------------
+    # PostgreSQL
+    # ------------------------------------------------------------------
 
     logger.info(
-        "Ready | embeddings=%s | collection=%s",
+        "Initializing PostgreSQL database..."
+    )
+
+    with log_time(
+        "initializing PostgreSQL database"
+    ):
+
+        Base.metadata.create_all(
+            bind=engine
+        )
+
+    logger.info(
+        "PostgreSQL database ready."
+    )
+
+    # ------------------------------------------------------------------
+    # Embedding model
+    # ------------------------------------------------------------------
+
+    logger.info(
+        "Loading embedding model: %s",
+        settings.embedding_provider,
+    )
+
+    with log_time(
+        "loading embedding model"
+    ):
+
+        app_state["embeddings"] = get_embeddings(
+            settings.embedding_provider,
+            settings.openai_api_key,
+        )
+
+    # ------------------------------------------------------------------
+    # Qdrant
+    # ------------------------------------------------------------------
+
+    logger.info(
+        "Connecting to Qdrant..."
+    )
+
+    with log_time(
+        "connecting to Qdrant"
+    ):
+
+        app_state["qdrant_client"] = get_qdrant_client(
+            settings.qdrant_url,
+            settings.qdrant_api_key,
+        )
+
+    # ------------------------------------------------------------------
+    # OpenAI LLM
+    # ------------------------------------------------------------------
+
+    logger.info(
+        "Initializing OpenAI LLM: %s",
+        settings.llm_model,
+    )
+
+    with log_time(
+        "initializing OpenAI LLM"
+    ):
+
+        app_state["llm"] = ChatOpenAI(
+            model=settings.llm_model,
+            temperature=0,
+            api_key=settings.openai_api_key,
+        )
+
+    # ------------------------------------------------------------------
+    # Temporary upload directory
+    # ------------------------------------------------------------------
+
+    Path(
+        settings.upload_dir
+    ).mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    logger.info(
+        "Application ready | embedding=%s | "
+        "collection=%s | database=PostgreSQL",
         settings.embedding_provider,
         settings.qdrant_collection,
     )
-    yield  # Server is now running and handling requests
 
-    app_state.clear()  # Release all resources on shutdown
-    logger.info("Server shut down.")
+    yield
 
+    # ------------------------------------------------------------------
+    # Shutdown
+    # ------------------------------------------------------------------
+
+    app_state.clear()
+
+    logger.info(
+        "Server shut down."
+    )
+
+
+# ======================================================================
+# FastAPI application
+# ======================================================================
 
 app = FastAPI(
     title="RAG API",
-    description="Upload files, ask questions, get answers with exact source references.",
-    version="1.0.0",
+    description=(
+        "Session-based RAG API with PostgreSQL, "
+        "Qdrant and OpenAI."
+    ),
+    version="2.0.0",
     lifespan=lifespan,
 )
 
-# Allow a browser served from a different port/origin to call this API.
+
+# ======================================================================
+# CORS
+# ======================================================================
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -80,11 +191,27 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Register all routes defined in app/routes.py.
-app.include_router(router)
 
+# ======================================================================
+# Routes
+# ======================================================================
+
+app.include_router(
+    router
+)
+
+
+# ======================================================================
+# Local execution
+# ======================================================================
 
 if __name__ == "__main__":
+
     import uvicorn
 
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    uvicorn.run(
+        "main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+    )

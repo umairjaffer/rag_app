@@ -1,8 +1,7 @@
-"""Pydantic models that define the shape of every API request and response.
+"""
+models.py
 
-FastAPI uses these classes to:
-1. Validate incoming data (a wrong type returns a 422 error automatically).
-2. Generate the interactive /docs page automatically.
+Pydantic request and response models used by FastAPI.
 """
 
 from typing import List, Optional
@@ -10,74 +9,192 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
+# ======================================================================
+# References
+# ======================================================================
+
 class Reference(BaseModel):
-    """One chunk that was retrieved and used to build an answer."""
+    """
+    Source information returned with an LLM answer.
 
-    file_name: str          # e.g. "annual_report.pdf"
-    file_type: str          # e.g. "pdf", "docx", "txt"
-    page_number: int        # Which page/row the chunk came from (1-indexed)
-    chunk_index: int        # Position of this chunk within the document
-    chunk_text: str         # The exact text that was retrieved
-    relevance_score: float  # Cosine similarity score between 0.0 and 1.0
+    Chunk text is intentionally not exposed to the frontend.
+    """
 
+    file_name: str
+    page_number: int
+
+
+# ======================================================================
+# Query
+# ======================================================================
 
 class QueryRequest(BaseModel):
-    """What the user sends when asking a question."""
+    """Request body for asking a question."""
+
+    session_id: str
 
     question: str
-    top_k: int = Field(default=5, ge=1, le=20)  # How many chunks to retrieve
+
+    top_k: int = Field(
+        default=5,
+        ge=1,
+        le=20,
+    )
 
 
 class QueryResponse(BaseModel):
-    """The generated answer plus every source chunk used to build it."""
+    """Answer returned by the RAG system."""
+
+    session_id: str
 
     question: str
+
     answer: str
+
     references: List[Reference]
+
     embedding_provider: str
 
 
+# ======================================================================
+# Upload
+# ======================================================================
+
 class FileUploadResult(BaseModel):
-    """Status of a single file within a batch upload."""
+    """Status of one uploaded file."""
 
     file_name: str
+
     doc_id: str
+
     file_type: str
-    status: str                    # "indexed" if successful, "error" otherwise
-    chunks_created: int = 0        # How many chunks were stored in Qdrant
-    error: Optional[str] = None    # Error message if status == "error"
+
+    status: str
+
+    chunks_created: int = 0
+
+    error: Optional[str] = None
 
 
 class UploadResponse(BaseModel):
-    """Summary of a batch upload -- one FileUploadResult per file."""
+    """Summary of a multiple-file upload."""
+
+    session_id: str
 
     total_files: int
+
     successful: int
+
     failed: int
+
     results: List[FileUploadResult]
 
 
-class DocumentInfo(BaseModel):
-    """One row in the list of indexed documents."""
+# ======================================================================
+# Documents
+# ======================================================================
 
-    doc_id: str              # ID to use when calling DELETE /documents/{doc_id}
+class DocumentInfo(BaseModel):
+    """Information about one indexed document."""
+
+    doc_id: str
+
     file_name: str
+
     file_type: str
-    chunk_count: int         # Total chunks stored in Qdrant for this file
-    upload_timestamp: str    # ISO timestamp of when it was indexed
+
+    chunk_count: int
+
+    upload_timestamp: str
 
 
 class DocumentListResponse(BaseModel):
-    """Response for GET /documents."""
+    """List of documents belonging to a session."""
 
-    documents: List[DocumentInfo]  # One entry per file (not per chunk)
+    session_id: str
+
+    documents: List[DocumentInfo]
+
     total: int
 
 
-class DeleteResponse(BaseModel):
-    """Confirmation that a document was removed."""
+# ======================================================================
+# Sessions
+# ======================================================================
 
-    status: str            # Always "deleted" on success
+class SessionCreateResponse(BaseModel):
+    """Response after creating a new session."""
+
+    session_id: str
+
+    created_at: str
+
+
+class SessionInfo(BaseModel):
+    """Summary information about one session."""
+
+    session_id: str
+
+    created_at: str
+
+    document_count: int
+
+    message_count: int
+
+
+class SessionListResponse(BaseModel):
+    """List of available sessions."""
+
+    sessions: List[SessionInfo]
+
+    total: int
+
+
+class ChatHistoryMessage(BaseModel):
+    """One message from session chat history."""
+
+    role: str
+
+    content: str
+
+    references: List[Reference] = []
+
+
+class SessionDetailResponse(BaseModel):
+    """Complete information about one session."""
+
+    session_id: str
+
+    created_at: str
+
+    documents: List[DocumentInfo]
+
+    messages: List[ChatHistoryMessage]
+
+
+class SessionDeleteResponse(BaseModel):
+    """Response after deleting a session."""
+
+    status: str
+
+    session_id: str
+
+    documents_deleted: int
+
+    messages_deleted: int
+
+
+# ======================================================================
+# Existing document deletion
+# ======================================================================
+
+class DeleteResponse(BaseModel):
+    """Response after deleting a document."""
+
+    status: str
+
     doc_id: str
+
     file_name: str
-    chunks_deleted: int    # How many Qdrant points were removed
+
+    chunks_deleted: int

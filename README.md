@@ -46,6 +46,7 @@ rag_app/
 ├── frontend/
 │   └── streamlit_ui.py
 │
+├──research_ntoebook.ipynb
 ├── .env
 ├── .gitignore
 ├── requirements.txt

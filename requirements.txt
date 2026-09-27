@@ -1,0 +1,24 @@
+# --- Web framework -----------------------------------------------------
+fastapi
+uvicorn[standard]
+pydantic-settings
+python-multipart
+python-dotenv
+
+# --- LangChain stack -----------------------------------------------------
+langchain
+langchain-openai
+langchain-text-splitters
+langchain-huggingface
+langchain-community
+
+# --- Vector store -----------------------------------------------------
+qdrant-client
+
+# --- Embedding models (used by langchain-huggingface) -----------------------------------------------------
+sentence-transformers
+
+# --- File loaders -----------------------------------------------------
+pypdf
+docx2txt
+unstructured

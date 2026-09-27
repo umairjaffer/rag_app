@@ -1,0 +1,100 @@
+# Python
+
+**pycache**/
+*.py[cod]
+*$py.class
+*.so
+
+# Virtual environments
+
+.venv/
+venv/
+env/
+ENV/
+.env/
+.conda/
+
+# Environment variables / secrets
+
+.env
+.env.*
+!.env.example
+
+# IDEs / Editors
+
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter Notebook
+
+.ipynb_checkpoints/
+
+# Testing / Coverage
+
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+
+# Build / Distribution
+
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# FastAPI / Uvicorn
+
+*.log
+
+# Temporary uploaded files
+
+backend/upload_tmp/
+upload_tmp/
+uploads/
+tmp/
+temp/
+
+# RAG / Local data
+
+*.db
+*.sqlite
+*.sqlite3
+
+# Qdrant local storage
+
+qdrant_storage/
+
+# OS generated files
+
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Python tooling
+
+.mypy_cache/
+.ruff_cache/
+.pyre/
+.pytype/
+
+# Streamlit
+
+.streamlit/secrets.toml
+
+# Local configuration
+
+*.local
+config.local.*
+
+# Generated files
+
+*.tmp
+*.bak
+*.cache
+*.pid
+*.lock

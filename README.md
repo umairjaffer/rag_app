@@ -158,19 +158,128 @@ chat_messages
 ## API Endpoints
 
 ```text
-POST   /sessions
 GET    /sessions
+POST   /sessions
+GET    /sessions/{session_id}
 DELETE /sessions/{session_id}
 
-POST   /upload
-POST   /query
-GET    /sessions/{session_id}/messages
+POST   /sessions/{session_id}/upload
+GET    /sessions/{session_id}/documents
+DELETE /sessions/{session_id}/documents/{doc_id}
 
-GET    /documents
-DELETE /documents/{doc_id}
+POST   /sessions/{session_id}/query
 
 GET    /health
 ```
+
+## Getting Started (Clone & Setup)
+
+Follow these steps to clone the repository and make it fully workable on your machine.
+
+### 1. Clone the Repository
+
+```bash
+git clone https://github.com/umairjaffer/rag_app.git
+cd rag_app
+```
+
+### 2. Create a Virtual Environment
+
+```bash
+python -m venv venv
+```
+
+Activate it:
+
+```bash
+# Windows
+venv\Scripts\activate
+
+# macOS / Linux
+source venv/bin/activate
+```
+
+### 3. Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure Environment Variables
+
+Copy the example file (or create a new one) and fill in your own values:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and set:
+
+```env
+OPENAI_API_KEY=your_key
+LLM_MODEL=gpt-4o-mini
+
+EMBEDDING_PROVIDER=huggingface
+
+QDRANT_URL=your_qdrant_url
+QDRANT_API_KEY=your_qdrant_api_key
+QDRANT_COLLECTION=rag_uploads
+
+RETRIEVER_K=5
+MAX_UPLOAD_SIZE_MB=50
+
+DATABASE_URL=postgresql+psycopg2://postgres:password@localhost:5432/rag_app
+```
+
+### 5. Set Up PostgreSQL
+
+Make sure PostgreSQL is installed and running, then create the database:
+
+```bash
+psql -U postgres -c "CREATE DATABASE rag_app;"
+```
+
+Update `DATABASE_URL` in `.env` to match your PostgreSQL username, password, host, and port.
+
+### 6. Set Up Qdrant
+
+* Use a local Qdrant instance (Docker) or a hosted Qdrant Cloud instance.
+
+```bash
+docker run -p 6333:6333 qdrant/qdrant
+```
+
+* Set `QDRANT_URL` and `QDRANT_API_KEY` in `.env` accordingly.
+
+### 7. Run the Backend
+
+```bash
+cd backend
+python main.py
+```
+
+Verify it's working by visiting:
+
+```text
+http://127.0.0.1:8000/docs
+```
+
+### 8. Run the Frontend
+
+In a new terminal (with the virtual environment activated):
+
+```bash
+streamlit run frontend/streamlit_ui.py
+```
+
+### 9. Verify Everything Works
+
+* Open the Streamlit UI in your browser
+* Create a session
+* Upload a document
+* Ask a question and confirm you get an answer with source references
+
+If all these steps succeed, the application is fully cloned and workable.
 
 ## Run
 

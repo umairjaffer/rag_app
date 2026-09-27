@@ -56,9 +56,9 @@ logger = logging.getLogger(__name__)
 # Chunk configuration
 # ======================================================================
 
-CHUNK_SIZE = 500
+CHUNK_SIZE = 800
 
-CHUNK_OVERLAP = 50
+CHUNK_OVERLAP = 100
 
 
 # ======================================================================

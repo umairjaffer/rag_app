@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     retriever_k: int = 5
 
     upload_dir: str = "uploads"
-    max_upload_size_mb: int = 16
+    max_upload_size_mb: int = 20
 
     database_url: str
 

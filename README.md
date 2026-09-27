@@ -125,8 +125,8 @@ EMBEDDING_PROVIDER=openai
 
 ```text
 RecursiveCharacterTextSplitter
-Chunk Size: 500
-Chunk Overlap: 50
+Chunk Size: 800
+Chunk Overlap: 100
 ```
 
 ## Storage

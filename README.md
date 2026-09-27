@@ -1,13 +1,14 @@
 # RAG Application
 
-A document-based RAG application built with **FastAPI, Streamlit, LangChain, Qdrant, PostgreSQL, Hugging Face/OpenAI Embeddings, and OpenAI LLM**.
+A document-based Retrieval-Augmented Generation (RAG) application built with **FastAPI, Streamlit, LangChain, Qdrant, PostgreSQL, OpenAI Embeddings, OpenAI LLM, and LangSmith**.
 
 ## Features
 
 * Single and multiple document upload
 * PDF, DOCX, TXT, CSV, and Markdown support
-* Document loading, metadata extraction, and chunking
-* Hugging Face and OpenAI embedding support
+* Document loading and metadata extraction
+* Recursive character text splitting
+* OpenAI embedding support
 * Qdrant vector storage and similarity search
 * Configurable Top-K retrieval
 * OpenAI LLM response generation
@@ -20,11 +21,13 @@ A document-based RAG application built with **FastAPI, Streamlit, LangChain, Qdr
 * Automatic deletion of session documents from Qdrant
 * Upload and query error handling
 * Backend operation timing and logging
+* LangSmith tracing for document loading, embedding, retrieval, and LLM operations
 
 ## Project Structure
 
 ```text
 rag_app/
+
 ├── backend/
 │   ├── app/
 │   │   ├── __init__.py
@@ -54,19 +57,25 @@ rag_app/
 ```text
 Upload Files
      ↓
+Validate Files
+     ↓
 Load Documents
      ↓
 Add Metadata
      ↓
 Chunk Documents
      ↓
-Generate Embeddings
+Generate OpenAI Embeddings
      ↓
-Store in Qdrant
+Store Vectors + Metadata in Qdrant
      ↓
 User Question
      ↓
-Retrieve Top-K Chunks
+Generate Query Embedding
+     ↓
+Retrieve Top-K Chunks from Qdrant
+     ↓
+Build Context
      ↓
 OpenAI LLM
      ↓
@@ -80,29 +89,72 @@ Create Session
      ↓
 Upload Documents
      ↓
-Documents linked to Session
+Documents Linked to Session
+     ↓
+Documents Indexed in Qdrant
      ↓
 Ask Questions
      ↓
-Chat History → PostgreSQL
+Retrieve Session-Specific Chunks
      ↓
-Answer + Sources
+Generate Answer
+     ↓
+Save Chat History + Sources in PostgreSQL
      ↓
 Delete Session
      ↓
-Qdrant Documents + Chat History Deleted
+Qdrant Documents + PostgreSQL Session Data Deleted
 ```
+
+## LangSmith Tracing
+
+LangSmith is used for tracing and observability of the RAG pipeline.
+
+### Upload Tracing
+
+```text
+Upload Files API
+└── RAG Document Indexing
+    ├── Load File
+    │   └── Select Document Loader
+    └── Embed Documents
+```
+
+### Query Tracing
+
+```text
+Query API
+└── RAG Query
+    ├── Embed Question
+    ├── Qdrant Retrieval
+    └── ChatOpenAI
+```
+
+LangSmith tracing helps inspect:
+
+* Document loading
+* Document embedding
+* Query embedding
+* Qdrant retrieval
+* Retrieved context
+* LLM execution
+* Execution time
+* Errors during traced operations
+
+## Supported Document Loaders
+
+| File Type         | Loader                     |
+| ----------------- | -------------------------- |
+| PDF               | PyPDFLoader                |
+| DOCX              | Docx2txtLoader             |
+| Markdown          | UnstructuredMarkdownLoader |
+| Markdown Fallback | TextLoader                 |
+| CSV               | CSVLoader                  |
+| TXT               | TextLoader                 |
 
 ## Embeddings
 
-### Hugging Face
-
-```text
-Model: sentence-transformers/all-MiniLM-L6-v2
-Dimension: 384
-```
-
-### OpenAI
+The application uses **OpenAI embeddings**.
 
 ```text
 Model: text-embedding-3-small
@@ -112,19 +164,14 @@ Dimension: 1536
 Configured through:
 
 ```env
-EMBEDDING_PROVIDER=huggingface
-```
-
-or:
-
-```env
 EMBEDDING_PROVIDER=openai
 ```
 
 ## Chunking
 
+The application uses `RecursiveCharacterTextSplitter`.
+
 ```text
-RecursiveCharacterTextSplitter
 Chunk Size: 800
 Chunk Overlap: 100
 ```
@@ -133,7 +180,11 @@ Chunk Overlap: 100
 
 ### Qdrant
 
-Stores document vectors and metadata:
+The application uses a **remote Qdrant instance** for vector storage.
+
+Qdrant stores document vectors and metadata.
+
+Payload includes:
 
 ```text
 session_id
@@ -146,13 +197,18 @@ chunk_text
 upload_timestamp
 ```
 
+The application uses `session_id` and `doc_id` for document isolation and management.
+
 ### PostgreSQL
 
-Stores:
+PostgreSQL stores application-level data:
 
 ```text
 sessions
+documents
 chat_messages
+message_sources
+processing_logs
 ```
 
 ## API Endpoints
@@ -160,10 +216,12 @@ chat_messages
 ```text
 GET    /sessions
 POST   /sessions
+
 GET    /sessions/{session_id}
 DELETE /sessions/{session_id}
 
 POST   /sessions/{session_id}/upload
+
 GET    /sessions/{session_id}/documents
 DELETE /sessions/{session_id}/documents/{doc_id}
 
@@ -172,14 +230,13 @@ POST   /sessions/{session_id}/query
 GET    /health
 ```
 
-## Getting Started (Clone & Setup)
-
-Follow these steps to clone the repository and make it fully workable on your machine.
+## Getting Started
 
 ### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/umairjaffer/rag_app.git
+
 cd rag_app
 ```
 
@@ -205,81 +262,129 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Make sure the `langsmith` package is installed because LangSmith tracing is used by the application.
+
 ### 4. Configure Environment Variables
 
-Copy the example file (or create a new one) and fill in your own values:
-
-```bash
-cp .env.example .env
-```
-
-Then edit `.env` and set:
+Create a `.env` file in the project root:
 
 ```env
-OPENAI_API_KEY=your_key
+OPENAI_API_KEY=your_openai_api_key
+
 LLM_MODEL=gpt-4o-mini
 
-EMBEDDING_PROVIDER=huggingface
+EMBEDDING_PROVIDER=openai
 
-QDRANT_URL=your_qdrant_url
+QDRANT_URL=your_remote_qdrant_url
 QDRANT_API_KEY=your_qdrant_api_key
-QDRANT_COLLECTION=rag_uploads
+QDRANT_COLLECTION=rag_documents
 
 RETRIEVER_K=5
-MAX_UPLOAD_SIZE_MB=50
+
+MAX_UPLOAD_SIZE_MB=20
 
 DATABASE_URL=postgresql+psycopg2://postgres:password@localhost:5432/rag_app
+
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_PROJECT=rag_app
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 ```
+
+Do not commit `.env` or API keys to Git.
 
 ### 5. Set Up PostgreSQL
 
-Make sure PostgreSQL is installed and running, then create the database:
+Make sure PostgreSQL is installed and running.
+
+Create the database:
 
 ```bash
 psql -U postgres -c "CREATE DATABASE rag_app;"
 ```
 
-Update `DATABASE_URL` in `.env` to match your PostgreSQL username, password, host, and port.
+Update `DATABASE_URL` according to your PostgreSQL username, password, host, port, and database name.
 
-### 6. Set Up Qdrant
+The application automatically creates the required tables when the backend starts.
 
-* Use a local Qdrant instance (Docker) or a hosted Qdrant Cloud instance.
+### 6. Configure Remote Qdrant
 
-```bash
-docker run -p 6333:6333 qdrant/qdrant
+This application uses a **remote Qdrant instance** instead of a local Docker-based Qdrant server.
+
+Add your remote Qdrant credentials to `.env`:
+
+```env
+QDRANT_URL=your_remote_qdrant_url
+QDRANT_API_KEY=your_qdrant_api_key
+QDRANT_COLLECTION=rag_documents
 ```
 
-* Set `QDRANT_URL` and `QDRANT_API_KEY` in `.env` accordingly.
+The backend connects to the remote Qdrant instance during startup and creates the collection automatically if it does not already exist.
 
-### 7. Run the Backend
+### 7. Configure LangSmith
+
+Create a LangSmith API key and add the following variables to `.env`:
+
+```env
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_PROJECT=rag_app
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
+```
+
+When tracing is enabled, the application records important RAG operations such as:
+
+```text
+Document Loading
+      ↓
+Document Embedding
+      ↓
+Qdrant Retrieval
+      ↓
+LLM Generation
+```
+
+These traces can be inspected in the configured LangSmith project.
+
+### 8. Run the Backend
+
+From the project root:
 
 ```bash
 cd backend
+
 python main.py
 ```
 
-Verify it's working by visiting:
+The FastAPI server runs on:
+
+```text
+http://127.0.0.1:8000
+```
+
+API documentation:
 
 ```text
 http://127.0.0.1:8000/docs
 ```
 
-### 8. Run the Frontend
+### 9. Run the Frontend
 
-In a new terminal (with the virtual environment activated):
+Open a new terminal with the virtual environment activated:
 
 ```bash
 streamlit run frontend/streamlit_ui.py
 ```
 
-### 9. Verify Everything Works
+### 10. Verify the Application
 
-* Open the Streamlit UI in your browser
-* Create a session
-* Upload a document
-* Ask a question and confirm you get an answer with source references
-
-If all these steps succeed, the application is fully cloned and workable.
+1. Open the Streamlit interface.
+2. Create a session.
+3. Upload one or multiple supported documents.
+4. Confirm that the documents are indexed successfully.
+5. Ask a question about the uploaded documents.
+6. Confirm that the answer contains source references.
+7. Open LangSmith and verify the upload/query traces.
 
 ## Run
 
@@ -287,6 +392,7 @@ If all these steps succeed, the application is fully cloned and workable.
 
 ```bash
 cd backend
+
 python main.py
 ```
 
@@ -296,7 +402,7 @@ python main.py
 streamlit run frontend/streamlit_ui.py
 ```
 
-API documentation:
+### API Documentation
 
 ```text
 http://127.0.0.1:8000/docs
@@ -305,19 +411,32 @@ http://127.0.0.1:8000/docs
 ## Environment Variables
 
 ```env
-OPENAI_API_KEY=your_key
+OPENAI_API_KEY=your_openai_api_key
+
 LLM_MODEL=gpt-4o-mini
 
-EMBEDDING_PROVIDER=huggingface
+EMBEDDING_PROVIDER=openai
 
-QDRANT_URL=your_qdrant_url
+QDRANT_URL=your_remote_qdrant_url
 QDRANT_API_KEY=your_qdrant_api_key
-QDRANT_COLLECTION=rag_uploads
+QDRANT_COLLECTION=rag_documents
 
 RETRIEVER_K=5
-MAX_UPLOAD_SIZE_MB=50
+
+MAX_UPLOAD_SIZE_MB=20
 
 DATABASE_URL=postgresql+psycopg2://postgres:password@localhost:5432/rag_app
+
+LANGSMITH_TRACING=true
+LANGSMITH_API_KEY=your_langsmith_api_key
+LANGSMITH_PROJECT=rag_app
+LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 ```
 
-Do not commit `.env` or API keys to Git.
+## Security
+
+* Never commit `.env` to Git.
+* Never expose OpenAI API keys.
+* Never expose Qdrant API keys.
+* Never expose LangSmith API keys.
+* Keep database credentials private.

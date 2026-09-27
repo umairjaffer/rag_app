@@ -4,6 +4,11 @@ api.py
 Business logic for all FastAPI endpoints.
 
 The routes themselves are defined in routes.py.
+
+LangSmith tracing:
+    - Trace upload API requests
+    - Trace query API requests
+    - Attach useful session/request metadata
 """
 
 import logging
@@ -14,6 +19,7 @@ from typing import List
 
 from fastapi import Depends, File, HTTPException, UploadFile
 from langchain_openai import ChatOpenAI
+from langsmith import traceable
 from qdrant_client import QdrantClient
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -233,6 +239,10 @@ def get_session_or_404(
 # Upload files into session
 # ======================================================================
 
+@traceable(
+    name="Upload Files API",
+    run_type="chain",
+)
 async def upload_files(
     session_id: str,
     files: List[UploadFile] = File(
@@ -249,6 +259,8 @@ async def upload_files(
     Upload one or multiple files into a specific session.
 
     A failure in one file does not stop the remaining files.
+
+    LangSmith traces the complete upload API operation.
     """
 
     # Verify session.
@@ -620,6 +632,10 @@ async def upload_files(
 # Query
 # ======================================================================
 
+@traceable(
+    name="Query API",
+    run_type="chain",
+)
 def query(
     request: QueryRequest,
     client: QdrantClient = Depends(get_client),
@@ -631,6 +647,8 @@ def query(
     Ask a question inside a specific session.
 
     The question and answer are persisted in PostgreSQL.
+
+    LangSmith traces the complete API-level query operation.
     """
 
     # Verify session.

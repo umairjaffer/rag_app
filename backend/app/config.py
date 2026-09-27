@@ -24,6 +24,12 @@ class Settings(BaseSettings):
 
     database_url: str
 
+    # LangSmith
+    langsmith_tracing: bool = False
+    langsmith_api_key: str | None = None
+    langsmith_project: str = "rag_app"
+    langsmith_endpoint: str = "https://api.smith.langchain.com"
+
     model_config = SettingsConfigDict(
         env_file=ROOT_DIR / ".env",
         env_file_encoding="utf-8",

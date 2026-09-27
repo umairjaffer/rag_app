@@ -9,11 +9,13 @@ Responsibilities:
 - Load embedding model
 - Connect to Qdrant
 - Initialize OpenAI LLM
+- Configure LangSmith tracing
 - Create temporary upload directory
 - Register API routes
 """
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -48,6 +50,31 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ======================================================================
+# LangSmith configuration
+# ======================================================================
+
+if settings.langsmith_tracing and settings.langsmith_api_key:
+
+    os.environ["LANGSMITH_TRACING"] = "true"
+    os.environ["LANGSMITH_API_KEY"] = settings.langsmith_api_key
+    os.environ["LANGSMITH_PROJECT"] = settings.langsmith_project
+    os.environ["LANGSMITH_ENDPOINT"] = settings.langsmith_endpoint
+
+    logger.info(
+        "LangSmith tracing enabled | project=%s",
+        settings.langsmith_project,
+    )
+
+else:
+
+    os.environ["LANGSMITH_TRACING"] = "false"
+
+    logger.info(
+        "LangSmith tracing disabled."
+    )
 
 
 # ======================================================================

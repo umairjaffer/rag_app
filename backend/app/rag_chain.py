@@ -19,6 +19,12 @@ Document management:
     - List documents
     - Delete documents
     - Delete complete session data from Qdrant
+
+LangSmith:
+    - Trace document indexing
+    - Trace question embedding
+    - Trace Qdrant retrieval
+    - Trace LLM generation
 """
 
 import hashlib
@@ -33,6 +39,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langsmith import traceable
 
 from qdrant_client import QdrantClient
 from qdrant_client.models import (
@@ -220,9 +227,93 @@ def ensure_collection(
 
 
 # ======================================================================
+# LangSmith traced embedding helpers
+# ======================================================================
+
+@traceable(
+    name="Embed Documents",
+    run_type="embedding",
+)
+def embed_documents_with_trace(
+    embeddings,
+    texts: List[str],
+):
+    """
+    Generate document embeddings with LangSmith tracing.
+    """
+
+    return embeddings.embed_documents(
+        texts
+    )
+
+
+@traceable(
+    name="Embed Question",
+    run_type="embedding",
+)
+def embed_query_with_trace(
+    embeddings,
+    question: str,
+):
+    """
+    Generate question embedding with LangSmith tracing.
+    """
+
+    return embeddings.embed_query(
+        question
+    )
+
+
+# ======================================================================
+# LangSmith traced Qdrant retrieval
+# ======================================================================
+
+@traceable(
+    name="Qdrant Retrieval",
+    run_type="retriever",
+)
+def retrieve_from_qdrant(
+    client: QdrantClient,
+    collection_name: str,
+    query_vector,
+    session_id: str,
+    top_k: int,
+):
+    """
+    Retrieve the most relevant chunks from Qdrant.
+
+    Retrieval is restricted to the current session.
+    """
+
+    session_filter = Filter(
+        must=[
+            FieldCondition(
+                key="session_id",
+                match=MatchValue(
+                    value=session_id
+                ),
+            )
+        ]
+    )
+
+    return client.query_points(
+        collection_name=collection_name,
+        query=query_vector,
+        query_filter=session_filter,
+        limit=top_k,
+        with_payload=True,
+        with_vectors=False,
+    )
+
+
+# ======================================================================
 # Indexing
 # ======================================================================
 
+@traceable(
+    name="RAG Document Indexing",
+    run_type="chain",
+)
 def index_documents(
     docs_by_file: Dict[str, List[Document]],
     client: QdrantClient,
@@ -234,6 +325,11 @@ def index_documents(
     Split, embed and store documents.
 
     Every chunk receives session_id in its Qdrant payload.
+
+    This function is traced in LangSmith as:
+        RAG Document Indexing
+            -> Embed Documents
+            -> Qdrant operations
     """
 
     splitter = RecursiveCharacterTextSplitter(
@@ -289,8 +385,6 @@ def index_documents(
 
                 metadata.append(
                     {
-                        # Session information is now stored
-                        # with every Qdrant point.
                         "session_id": session_id,
 
                         "file_name": file_name,
@@ -338,8 +432,9 @@ def index_documents(
         f"embedding {len(texts)} chunk(s)"
     ):
 
-        vectors = embeddings.embed_documents(
-            texts
+        vectors = embed_documents_with_trace(
+            embeddings,
+            texts,
         )
 
     # ------------------------------------------------------------------
@@ -418,6 +513,10 @@ def index_documents(
 # Query
 # ======================================================================
 
+@traceable(
+    name="RAG Query",
+    run_type="chain",
+)
 def query_with_references(
     question: str,
     top_k: int,
@@ -430,6 +529,22 @@ def query_with_references(
     """
     Retrieve chunks only from the current session and generate
     an answer using the LLM.
+
+    LangSmith trace:
+
+        RAG Query
+            |
+            +-- Embed Question
+            |
+            +-- Qdrant Retrieval
+            |
+            +-- Build Context
+            |
+            +-- Prompt
+            |
+            +-- OpenAI LLM
+            |
+            +-- Final Answer
     """
 
     if not collection_exists(
@@ -453,40 +568,25 @@ def query_with_references(
         "embedding the question"
     ):
 
-        query_vector = embeddings.embed_query(
-            question
+        query_vector = embed_query_with_trace(
+            embeddings,
+            question,
         )
 
     # ------------------------------------------------------------------
-    # Step 2: Create session filter
-    # ------------------------------------------------------------------
-
-    session_filter = Filter(
-        must=[
-            FieldCondition(
-                key="session_id",
-                match=MatchValue(
-                    value=session_id
-                ),
-            )
-        ]
-    )
-
-    # ------------------------------------------------------------------
-    # Step 3: Search Qdrant
+    # Step 2 + 3: Search Qdrant
     # ------------------------------------------------------------------
 
     with log_time(
         "searching Qdrant"
     ):
 
-        results = client.query_points(
+        results = retrieve_from_qdrant(
+            client=client,
             collection_name=collection_name,
-            query=query_vector,
-            query_filter=session_filter,
-            limit=top_k,
-            with_payload=True,
-            with_vectors=False,
+            query_vector=query_vector,
+            session_id=session_id,
+            top_k=top_k,
         )
 
     if not results.points:
